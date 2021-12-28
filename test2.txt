@@ -1,0 +1,10 @@
+global{
+    var int i <- 3;
+    var int j <- 2;
+    const bool b <- true;
+}
+
+start:{
+    Print("The value of i/j is ", i*j);
+    Print("The value of (b && false) || !true is ", (b && false) || !true );
+}
