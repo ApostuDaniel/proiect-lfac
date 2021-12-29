@@ -12,7 +12,7 @@
     int yylex(void);
 
     void lookupIdTable(identif** id);
-    identif* lookupIdTableByName(char* s);
+    identif** lookupIdTableByName(char* s);
     expression* create_int_expr(int value);
     expression* create_bool_expr(bool value);
     expression* create_char_expr(char value);
@@ -20,6 +20,7 @@
     expression* create_str_expr(char* value);
     expression* create_expr_expr(expression* value);
     void createBinaryOperation(expression** expr1, expression** expr2, expression** expr3, char op);
+    void createCompareOperation(expression** expr1, expression** expr2, expression** expr3, Comparison op);
     void free_expr(expression* expr);
     identif* create_id(bool isConst, bool isType, bool isAssigned, char* Name, type_struct type, expression* expression);
     void fill_id(identif* id, bool isConst, bool isType, bool isAssigned, int index, type_struct type, expression* expression);
@@ -134,19 +135,30 @@ com_stmt: '{'
 
 expr: constant {printf("\nconstant\n");$$ = $1;}
 |   ID  {printf("\nID\n");lookupIdTable(&$1); if(!$1->isAssigned) yyerror("Can't use an unassigned id in an expression"); else $$ = $1->value;}
-|   expr ASSGN  expr /*{
-    if($1->exprType.type == $3->exprType.type && $1->exprType.isArray == false && $3->exprType.isArray == false){
+|   expr ASSGN  expr { printf("\nexpr ASSGN expr\n");
+    if($1->exprType.type == $3->exprType.type && $1->exprType.isArray == false && $3->exprType.isArray == false && 
+    $1->isLvalue){
+        identif** idptr = lookupIdTableByName($1->idName);
+        expression* assignedValue = create_expr_expr($3);
+        (*idptr)->value = assignedValue;
+        if((*idptr)->value->idName != NULL) free((*idptr)->value->idName);
+        (*idptr)->value->idName = strdup((*idptr)->name);
+        (*idptr)->value->isLvalue = true;
+        (*idptr)->value->index = $1->index;
         free_expr($1);
-        $1 = create_expr_expr($3);
-        $$ = create_expr_expr($1);
-        free_expr($3);
+        $$ = create_expr_expr($3);
+        if($$->idName !=NULL) free($$->idName);
+        $$->isLvalue = false;
     }else {
+        if(!$1->isLvalue){
+            yyerror("can't assign to right value");
+            free_expr($1);
+        }
         yyerror("left and right value aren't of the same type");
-        free_expr($1);
-        free_expr($3);
+        if(!$3->isLvalue) free_expr($3);
     }
     
-    }*/
+    }
 |   '(' expr ')'    {printf("\n( expr )\n"); $$ = $2;}
 |   expr '[' expr ']'
 |   expr '(' exprs ')'
@@ -309,18 +321,164 @@ expr: constant {printf("\nconstant\n");$$ = $1;}
         yyerror("for unary '!' operator the operand must be of type bool"); 
     free_expr($2);
     }
-|   expr EQ expr
-|   expr NEQ expr
-|   expr LEQ expr
-|   expr GEQ expr
-|   expr '<' expr
-|   expr '>' expr ;
+|   expr EQ expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_EQ);}
+|   expr NEQ expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_NEQ);}
+|   expr LEQ expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_LEQ);}
+|   expr GEQ expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_GEQ);}
+|   expr '<' expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_L);}
+|   expr '>' expr {printf("\nexpr EQ expr\n");createCompareOperation(&$1, &$3, &$$, OP_G);};
 
 exprs: exprs ',' expr
 |   expr
 |   /*EMPTY*/;
 
 %%
+void createCompareOperation(expression** expr1, expression** expr2, expression** expr3, Comparison op){
+    char err[264] = {0};
+    if((*expr1)->exprType.type == (*expr2)->exprType.type && (*expr1)->exprType.isArray == false && (*expr2)->exprType.isArray == false){
+        switch ((*expr2)->exprType.type)
+        {
+        case T_INT:
+            switch (op)
+            {
+                case OP_EQ:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue == (*expr2)->intvalue);
+                    break;
+                case OP_NEQ:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue != (*expr2)->intvalue);
+                    break;
+                case OP_LEQ:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue <= (*expr2)->intvalue);
+                    break;
+                case OP_GEQ:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue >= (*expr2)->intvalue);
+                    break;
+                case OP_L:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue < (*expr2)->intvalue);
+                    break;
+                case OP_G:
+                    (*expr3) = create_bool_expr((*expr1)->intvalue > (*expr2)->intvalue);
+                    break;
+                default:
+                    sprintf(err, "Invalid comaprison operation");
+                    yyerror(err);
+            }       
+            break;
+        case T_CHAR:
+            switch (op)
+            {
+                case OP_EQ:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue == (*expr2)->charvalue);
+                    break;
+                case OP_NEQ:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue != (*expr2)->charvalue);
+                    break;
+                case OP_LEQ:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue <= (*expr2)->charvalue);
+                    break;
+                case OP_GEQ:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue >= (*expr2)->charvalue);
+                    break;
+                case OP_L:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue < (*expr2)->charvalue);
+                    break;
+                case OP_G:
+                    (*expr3) = create_bool_expr((*expr1)->charvalue > (*expr2)->charvalue);
+                    break;
+                default:
+                    sprintf(err, "Invalid comaprison operation");
+                    yyerror(err);
+            }       
+            break;
+        case T_FLOAT:
+            switch(op){
+                case OP_EQ:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue == (*expr2)->floatvalue);
+                    break;
+                case OP_NEQ:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue != (*expr2)->floatvalue);
+                    break;
+                case OP_LEQ:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue <= (*expr2)->floatvalue);
+                    break;
+                case OP_GEQ:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue >= (*expr2)->floatvalue);
+                    break;
+                case OP_L:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue < (*expr2)->floatvalue);
+                    break;
+                case OP_G:
+                    (*expr3) = create_bool_expr((*expr1)->floatvalue > (*expr2)->floatvalue);
+                    break;
+                default:
+                    sprintf(err, "Invalid comaprison operation");
+                    yyerror(err);
+            }       
+            break;
+        case T_STRING:
+            switch(op){
+                    case OP_EQ:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) == 0);
+                        break;
+                    case OP_NEQ:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) != 0);
+                        break;
+                    case OP_LEQ:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) <= 0);
+                        break;
+                    case OP_GEQ:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) >= 0);
+                        break;
+                    case OP_L:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) < 0);
+                        break;
+                    case OP_G:
+                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) > 0);
+                        break;
+                    default:
+                        sprintf(err, "Invalid comaprison operation");
+                        yyerror(err);
+                }       
+                break;
+        case T_BOOL:
+            switch(op){
+                    case OP_EQ:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue == (*expr2)->boolvalue);
+                        break;
+                    case OP_NEQ:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue != (*expr2)->boolvalue);
+                        break;
+                    case OP_LEQ:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue <= (*expr2)->boolvalue);
+                        break;
+                    case OP_GEQ:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue >= (*expr2)->boolvalue);
+                        break;
+                    case OP_L:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue < (*expr2)->boolvalue);
+                        break;
+                    case OP_G:
+                        (*expr3) = create_bool_expr((*expr1)->boolvalue > (*expr2)->boolvalue);
+                        break;
+                    default:
+                        sprintf(err, "Invalid comaprison operation");
+                        yyerror(err);
+                }       
+                break;
+       
+        default:
+            sprintf(err, "invalid type for comparison operator");
+            yyerror(err);
+            break;
+        }
+    }
+    else {
+            sprintf(err, "for comparison operator both operands must be of same type");
+            yyerror(err); 
+        }
+    if(!(*expr1)->isLvalue) free_expr((*expr1));
+    if(!(*expr2)->isLvalue) free_expr((*expr2));
+}
 
 void createBinaryOperation(expression** expr1, expression** expr2, expression** expr3, char op){   
     char err[264] = {0};
@@ -388,8 +546,8 @@ void createBinaryOperation(expression** expr1, expression** expr2, expression** 
             sprintf(err, "for binary '%c' operator both operands must be of same type", op);
             yyerror(err); 
         }
-    free_expr((*expr1));
-    free_expr((*expr2)); 
+    if(!(*expr1)->isLvalue) free_expr((*expr1));
+    if(!(*expr2)->isLvalue) free_expr((*expr2));
 }
 
 void lookupIdTable(identif** id){
@@ -403,11 +561,11 @@ void lookupIdTable(identif** id){
     printf("match not found\n");
 }
 
-identif* lookupIdTableByName(char* s){
+identif** lookupIdTableByName(char* s){
     for(int i = 0; i < fillAmount; ++i){
         if(id_table[i] != NULL && strcmp(s, id_table[i]->name) == 0 ){
             printf("match found\n");
-            return id_table[i];
+            return &id_table[i];
         }
     }
     return NULL;
@@ -439,7 +597,6 @@ void print(char* string, expression* expr){
     default:
         printf("No string representation for this type\n");
     }
-    printf("Reached the end\n");
 } 
 
 identif* create_id(bool isConst, bool isType, bool isAssigned, char* Name, type_struct type, expression* expr){
@@ -594,10 +751,9 @@ void yyerror(char* s){
 int main(int argc, char** argv){
     yyin = fopen(argv[1], "r");
     yyparse();
-    /* printf("amount: %d\n", fillAmount);
     for(int i = 0; i < fillAmount; ++i){
         free(id_table[i]);
-    } */
+    }
     return 0;
 }
 
