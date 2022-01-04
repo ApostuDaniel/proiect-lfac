@@ -32,6 +32,24 @@
 
     identif* id_table[100] = {0};
     unsigned int fillAmount = 0;
+
+    void add(char key);
+    void insert_type();
+    void printSymbolTable();
+    int inSymbolTable(char*);
+
+    struct dataType {
+        char * id_name;
+        char * data_type;
+        char * type;
+        int line_no;
+    } symbol_table[100];
+
+    int noSym=0;
+    int q;
+    char type[10];
+    extern int countn;
+
 %}
 
 %union{
@@ -83,24 +101,24 @@ global_scope: GLOBAL '{' var_defs '}'
 var_defs: var_defs var_def ';'
 |   /* EMPTY */ ;
 
-var_def: VAR type ID {printf("\nVAR type ID\n"); fill_id($3, false, false, false, fillAmount ,$2,NULL ); id_table[fillAmount++] = $3; }
-|   VAR type ID ASSGN expr  {printf("\nVAR type ID ASSGN expr\n");fill_id($3, false, false, true, fillAmount ,$2 ,$5 ); id_table[fillAmount++] = $3;}
-|   CONST type ID ASSGN expr {printf("\nCONST type ID ASSGN expr\n");fill_id($3, true, false, true, fillAmount ,$2 ,$5 ); id_table[fillAmount++] = $3;};
+var_def: VAR type ID {printf("\nVAR type ID\n"); fill_id($3, false, false, false, fillAmount ,$2,NULL ); id_table[fillAmount++] = $3; add('V'); }
+|   VAR type ID ASSGN expr  {printf("\nVAR type ID ASSGN expr\n");fill_id($3, false, false, true, fillAmount ,$2 ,$5 ); id_table[fillAmount++] = $3; add('V'); }
+|   CONST type ID ASSGN expr {printf("\nCONST type ID ASSGN expr\n");fill_id($3, true, false, true, fillAmount ,$2 ,$5 ); id_table[fillAmount++] = $3; };
 
 
-type: STRING {printf("\nSTRING\n");type_struct str; str.type = T_STRING; str.isArray = false; $$ = str; }
-|   FLOAT   {printf("\nFLOAT\n");type_struct flt; flt.type = T_FLOAT; flt.isArray = false; $$ = flt; }
-|   BOOL    {printf("\nBOOL\n");type_struct b; b.type = T_BOOL; b.isArray = false; $$ = b; }
-|   CHAR    {printf("\nCHAR\n");type_struct chr; chr.type = T_CHAR; chr.isArray = false; $$ = chr; }
-|   INT     {printf("\nINT\n");type_struct i; i.type = T_INT; i.isArray = false; $$ = i; }
-|   ID      {printf("\nIDpr\n");type_struct id; id.type = T_USER; id.isArray = false; $$ = id; }
+type: STRING {printf("\nSTRING\n");type_struct str; str.type = T_STRING; str.isArray = false; $$ = str; insert_type(); }
+|   FLOAT   {printf("\nFLOAT\n");type_struct flt; flt.type = T_FLOAT; flt.isArray = false; $$ = flt; insert_type();}
+|   BOOL    {printf("\nBOOL\n");type_struct b; b.type = T_BOOL; b.isArray = false; $$ = b; insert_type(); }
+|   CHAR    {printf("\nCHAR\n");type_struct chr; chr.type = T_CHAR; chr.isArray = false; $$ = chr; insert_type();}
+|   INT     {printf("\nINT\n");type_struct i; i.type = T_INT; i.isArray = false; $$ = i; insert_type(); }
+|   ID      {printf("\nIDpr\n");type_struct id; id.type = T_USER; id.isArray = false; $$ = id; insert_type(); }
 |   type '[' ']' {printf("\ntype []\n"); $$.isArray = true; };
 
-constant: STRINGCONST {printf("\nSTRINGCONST\n");$$ = create_str_expr($1);free($1);}
-|   BOOLCONST   {printf("\nBOOLCONST\n");$$ = create_bool_expr($1);}
-|   INTCONST    {printf("\nINTCONST\n");$$ = create_int_expr($1);}
-|   CHARCONST   {printf("\nCHARCONST\n");$$ = create_char_expr($1);}
-|   FLOATCONST  {printf("\nFLOATCONST\n");$$ = create_float_expr($1);};
+constant: STRINGCONST {printf("\nSTRINGCONST\n");$$ = create_str_expr($1);free($1); add('C'); }
+|   BOOLCONST   {printf("\nBOOLCONST\n");$$ = create_bool_expr($1); add('C'); }
+|   INTCONST    {printf("\nINTCONST\n");$$ = create_int_expr($1); add('C'); }
+|   CHARCONST   {printf("\nCHARCONST\n");$$ = create_char_expr($1); add('C'); }
+|   FLOATCONST  {printf("\nFLOATCONST\n");$$ = create_float_expr($1); add('C'); };
 
 definitions: definitions func_def
 |   definitions type_def
@@ -109,21 +127,21 @@ definitions: definitions func_def
 return_type: type
 |   VOID ;
 
-func_def: FUNC ID TAKES '(' params ')' RETURNS return_type statement ;
+func_def: FUNC ID { add('F'); } TAKES '(' params ')' RETURNS return_type statement ;
 
 params: params ',' type ID
 |   type ID
 |   /* EMPTY */ ;
 
-type_def: NEWTYPE ID '{' var_defs '}' ';' ;
+type_def: NEWTYPE ID { insert_type(); } '{' var_defs '}' ';';
 
 entry_point : START ':' statement ;
 
 statement:  com_stmt '}'
-|   IF '(' expr ')' statement ELSE statement
-|   WHILE '(' expr ')' statement
-|   FOR '(' expr ';' expr ';' expr ')' statement
-|   RETURN expr ';'
+|   IF { add('K'); } '(' expr ')' statement ELSE statement
+|   WHILE { add('K'); } '(' expr ')' statement
+|   FOR { add('K'); } '(' expr ';' expr ';' expr ')' statement
+|   RETURN { add('K'); } expr ';'
 |   var_def ';'
 |   expr ';'
 |   PRINT '(' STRINGCONST ',' expr ')' ';' {printf("\nPRINT ( STRINGCONST , expr ) ;\n");print($3, $5); free($3); if($5->isLvalue == false) free_expr($5);}
@@ -754,6 +772,72 @@ int main(int argc, char** argv){
     for(int i = 0; i < fillAmount; ++i){
         free(id_table[i]);
     }
+    printSymbolTable();
     return 0;
 }
+
+void printSymbolTable(){
+    printf("\n\n");
+	printf("\nSYMBOL   DATATYPE   TYPE   LINE NUMBER \n");
+	printf("_______________________________________\n\n");
+	int i=0;
+	for(i=0; i<noSym; i++) {
+		printf("%s\t%s\t%s\t%d\t\n", symbol_table[i].id_name, symbol_table[i].data_type, symbol_table[i].type, symbol_table[i].line_no);
+	}
+	for(i=0;i<noSym;i++) {
+		free(symbol_table[i].id_name);
+		free(symbol_table[i].type);
+	}
+	printf("\n\n");
+}
+
+int inSymbolTable(char *type){
+	int i;
+	for(i=noSym-1; i>=0; i--) {
+		if(strcmp(symbol_table[i].id_name, type)==0) {
+			return -1;
+			break;
+		}
+	}
+	return 0;
+}
+
+void add(char c) {
+  q=inSymbolTable(yytext);
+  if(!q) {
+   if(c == 'K') {
+			symbol_table[noSym].id_name=strdup(yytext);
+			symbol_table[noSym].data_type=strdup("N/A");
+			symbol_table[noSym].line_no=countn;
+			symbol_table[noSym].type=strdup("Keyword\t");
+			noSym++;
+		}
+		else if(c == 'V') {
+			symbol_table[noSym].id_name=strdup(yytext);
+			symbol_table[noSym].data_type=strdup(type);
+			symbol_table[noSym].line_no=countn;
+			symbol_table[noSym].type=strdup("Variable");
+			noSym++;
+		}
+		else if(c == 'C') {
+			symbol_table[noSym].id_name=strdup(yytext);
+			symbol_table[noSym].data_type=strdup("CONST");
+			symbol_table[noSym].line_no=countn;
+			symbol_table[noSym].type=strdup("Constant");
+			noSym++;
+		}
+		else if(c == 'F') {
+			symbol_table[noSym].id_name=strdup(yytext);
+			symbol_table[noSym].data_type=strdup(type);
+			symbol_table[noSym].line_no=countn;
+			symbol_table[noSym].type=strdup("Function");
+			noSym++;
+		}
+	}
+}
+
+void insert_type() {
+	strcpy(type, yytext);
+}
+    
 
