@@ -1,0 +1,40 @@
+global{
+    var int i;
+    const bool j <- true;
+    var string k <- "Thats right";
+    const char c <- 'k';
+    var float f <- 33.5;
+    var int[4] arr <- {24}; 
+    var int[4] arr2;
+    const float[3] arr3 <- {3.5};
+}
+
+newtype floor {
+    var int tiles <- 5;
+    var string color <- "blue";
+};
+
+func testFunc takes (int i, int j, floor l) returns null{
+    i <- j;
+    return l.tiles;
+}
+
+start:{
+   i;
+   j;
+   k;
+   c;
+   f;
+   var floor newFloor;
+   const floor newFloor2;
+   while(true){
+       if (j) then newFloor.tiles <- 5;
+       else newFloor.color <- "green" + testFunc(i, 2, f) * arr[1];
+       for(i <-1; i <- 5; ++i){
+           f <- f + arr[arr2[1]];
+           testFunc(1, i, 2 + 3 + i);
+           testFunc(testFunc("string", "int", f), x, i);
+       }
+   }
+     
+}

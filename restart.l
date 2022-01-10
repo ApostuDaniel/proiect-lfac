@@ -25,6 +25,7 @@
 "func" {printf("func");return FUNC;}
 "start" {printf("start");return START;}
 "if" {printf("if");return IF;}
+"then" {printf("then");return THEN;}
 "else" {printf("else");return ELSE;}
 "for" {printf("for");return FOR;}
 "while" {printf("while");return WHILE;}
@@ -44,11 +45,7 @@
 ([1-9][0-9]*|0)(\.[0-9]+)? {yylval.floatval=atof(yytext);printf("%f", yylval.floatval ); return FLOATCONST;}
 \"[^"]* {yylval.strval = strndup(yytext+1, yyleng-1); input(); printf("%s", yylval.strval); return STRINGCONST;}
 \'.\' {yylval.charval = yytext[1];printf("%c", yylval.charval); return CHARCONST;}
-[_a-zA-Z][_a-zA-Z0-9]* {
-    identif* id = (identif*)malloc(sizeof(identif));
-    bzero(id, sizeof(identif));
-    id->name = strndup(yytext, yyleng);
-    yylval.id_ptr = id; printf("%s", yytext);return ID;}
+[_a-zA-Z][_a-zA-Z0-9]* {yylval.strval = strdup(yytext); printf("%s", yylval.strval); return ID;}
 [ \t] {printf("%s", yytext);};
 \n {yylineno++;printf("\n");}
 . {printf("%c", yytext[0]);return yytext[0];}

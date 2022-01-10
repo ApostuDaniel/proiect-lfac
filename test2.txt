@@ -1,13 +1,9 @@
 global{
     var int i <- 2;
     var int j <- 4;
-    const bool b <- true;
 }
 
 start:{
-    j <- i;
-    ++j;
-    Print("The value of i is ", i);
-    Print("The value of j is ", j);
-    Print("The value of (b && false) || !true is ", (b && false) || !true );
+    Print("++i ", --i);
+    Print("i ", i);
 }
