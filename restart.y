@@ -23,12 +23,19 @@
     // void createCompareOperation(expression** expr1, expression** expr2, expression** expr3, Comparison op);
     // void free_expr(expression* expr);
     identif* create_id(bool isConst, bool isType, bool isAssigned, char* Name, type_struct type);
-    void id_assignment(char* name, Type type, int size, int value, bool isArray, bool isConst, bool isType, bool isAssigned );
+    value_struct* createValue(Type t, int ival, bool bval, float fval, char cval, char* sval);
+    value_struct* executeArithmeticOp(AST* left, AST* right, Operation op);
+    value_struct* executeLogicalOp(AST* left, AST* right, Operation op);
+    value_struct* executeComparisonOp(AST* left, AST* right, Operation op);
+    void id_assignment(char* name, Type type, int size, value_struct* value, bool isArray, bool isConst, bool isType, bool isAssigned );
     // void fill_id(identif* id, bool isConst, bool isType, bool isAssigned, int index, type_struct type, expression* expression);
     void free_id(identif* id);
     void free_tree(AST* root);
+    void freeValue(value_struct* value);
+    void freeIdTable();
+    void copyValue(value_struct** dest, value_struct** source);
     AST* buildAST(ASTInput in, AST* child1, AST* child2);
-    int evalAST(AST* root);
+    value_struct* evalAST(AST* root);
     
     
 
@@ -89,34 +96,33 @@ var_defs: var_defs var_def ';'
 |   /* EMPTY */ 
 ;
 
-var_def: VAR type ID {id_assignment($3, $2, -1, -1, false, false, false, false);}
-    
+var_def: VAR type ID {id_assignment($3, $2, -1, NULL, false, false, false, false);}   
 |   VAR type ID ASSGN expr  {
-    int value = evalAST($5);
+    value_struct* value = evalAST($5);
     free_tree($5);
     id_assignment($3, $2, -1, value, false, false, false, true);
     }
 
 |   CONST type ID ASSGN expr {
-    int value = evalAST($5);
+    value_struct* value = evalAST($5);
     free_tree($5);
     id_assignment($3, $2, -1, value, false, true, false, true);
     }
-|   VAR type '['INTCONST']' ID {id_assignment($6, $2, $4, -1, true, false, false, false);}
+|   VAR type '['INTCONST']' ID {id_assignment($6, $2, $4, NULL, true, false, false, false);}
 |   VAR type'['INTCONST']' ID ASSGN '{'expr'}'{
-    int value = evalAST($9);
+    value_struct* value = evalAST($9);
     free_tree($9); 
     id_assignment($6, $2, $4, value, true, false, false, true);
     }
 |   CONST type'['INTCONST']' ID ASSGN '{'expr'}'{
-    int value = evalAST($9);
+    value_struct* value = evalAST($9);
     free_tree($9); 
     id_assignment($6, $2, $4, value, true, true, false, true);
     }
-|   VAR ID ID {id_assignment($3, T_USER, -1, -1, false, false, false, false );}
-|   VAR ID'['INTCONST']' ID {id_assignment($6, T_USER, -1, $4, true, false, false, false );}
-|   CONST ID ID {id_assignment($3, T_USER, -1, -1, false, true, false, false );}
-|   CONST ID'['INTCONST']' ID {id_assignment($6, T_USER, -1, $4, true, true, false, false );}
+|   VAR ID ID {id_assignment($3, T_USER, -1, NULL, false, false, false, false );}
+|   VAR ID'['INTCONST']' ID {id_assignment($6, T_USER, $4, NULL, true, false, false, false );}
+|   CONST ID ID {id_assignment($3, T_USER, -1, NULL, false, true, false, false );}
+|   CONST ID'['INTCONST']' ID {id_assignment($6, T_USER, $4, NULL, true, true, false, false );}
 ;
 
 
@@ -128,15 +134,37 @@ type: STRING {$$ = T_STRING; }
 ;
 
 
-
-constant: STRINGCONST /*{$$ = create_str_expr($1);free($1);}*/
-|   BOOLCONST   /*{$$ = create_bool_expr($1);}*/
-|   INTCONST    {
-    ASTInput input; bzero(&input, sizeof(ASTInput)); 
-    input.role = N_INTEGER; input.value = $1; $$ = buildAST(input, NULL, NULL);
+constant: STRINGCONST {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_STRING; 
+        input.value = createValue(T_STRING, 0, false, 0.0, 0, $1);
+        free($1);
+        $$ = buildAST(input, NULL, NULL);
     }
-|   CHARCONST   /*{$$ = create_char_expr($1);}*/
-|   FLOATCONST  /*{$$ = create_float_expr($1);}*/
+|   BOOLCONST   {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_BOOLEAN; 
+        input.value = createValue(T_BOOL, 0, $1, 0.0, 0, NULL);
+        $$ = buildAST(input, NULL, NULL);
+    }
+|   INTCONST    {
+        ASTInput input;  
+        input.role = N_INTEGER; 
+        input.value = createValue(T_INT, $1, false, 0.0, 0, NULL);
+        $$ = buildAST(input, NULL, NULL);
+    }
+|   CHARCONST   {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_CHARACHTER; 
+        input.value = createValue(T_CHAR, 0, false, 0.0, $1, NULL);
+        $$ = buildAST(input, NULL, NULL);
+    }
+|   FLOATCONST  {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_FLOAT; 
+        input.value = createValue(T_FLOAT, 0, false, $1, 0, NULL);
+        $$ = buildAST(input, NULL, NULL);
+    }
 ;
 
 definitions: definitions func_def
@@ -193,8 +221,9 @@ expr: constant {$$ = $1;}
         identif** id = lookupIdTableByName($1);
         if(id == NULL) yyerror("Can't use an undefined identifier in an expression");
         else if(!(*id)->isAssigned) yyerror("Can't use an unassigned identifier in an expression");
+        else if((*id)->isConst){yyerror("Can't assign value to const identifier"); exit(1);}
         else{
-            (*id)->intvalue = evalAST($3);
+            (*id)->value = evalAST($3);
             free_tree($3);
             ASTInput input; bzero(&input, sizeof(ASTInput)); 
             input.role = N_IDENTIFIER; input.string = strdup((*id)->name); $$ = buildAST(input, NULL, NULL);
@@ -203,21 +232,47 @@ expr: constant {$$ = $1;}
     }
     
 |   '(' expr ')'    {
-        int value = evalAST($2); 
-        ASTInput input; bzero(&input, sizeof(ASTInput)); 
-        input.role = N_INTEGER; input.value = value; $$ = buildAST(input, NULL, NULL);
+        value_struct* value = evalAST($2); 
+        ASTInput input; bzero(&input, sizeof(ASTInput));
+        switch (value->type)
+        {
+            case T_INT:
+            input.role = N_INTEGER;
+            break;
+            case T_FLOAT:
+            input.role = N_FLOAT;
+            break;
+            case T_BOOL:
+            input.role = N_BOOLEAN;
+            break;
+            case T_STRING:
+            input.role = N_STRING;
+            break;
+            case T_CHAR:
+            input.role = N_CHARACHTER;
+            break;
+        default:
+            input.role = N_OTHER;
+            input.string = strdup("Undefined");
+            break;
+        }
+
+        input.value = value; $$ = buildAST(input, NULL, NULL);
         free_tree($2);
-        printf("\nFinished (expr)\n");
     }
 |   ID '[' expr ']'{
         identif** id = lookupIdTableByName($1);
         if(id == NULL) yyerror("Can't use an undefined identifier in an expression");
         else if(!(*id)->isAssigned) yyerror("Can't use an unassigned identifier in an expression");
         else{
-            int index = evalAST($3);
+            value_struct* index = evalAST($3);
+            if(index->type != T_INT){
+                yyerror("Array access index is not integer");
+                exit(1);
+            }
             free_tree($3);
             ASTInput input; bzero(&input, sizeof(ASTInput)); 
-            input.role = N_ARRAY_ELEM; input.string = strdup((*id)->name); input.index = index; 
+            input.role = N_ARRAY_ELEM; input.string = strdup((*id)->name); input.index = index->intvalue; 
             $$ = buildAST(input, NULL, NULL);
             free(input.string);
         }
@@ -225,7 +280,7 @@ expr: constant {$$ = $1;}
 |   expr '(' exprs ')'
 |   expr '.' ID
 |   expr '+' expr   {
-        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        ASTInput input; 
         input.role = N_OP; input.op = O_PLUS;
         $$ = buildAST(input, $1, $3);
 }
@@ -310,36 +365,51 @@ expr: constant {$$ = $1;}
             }  
         }       
 }
-|   expr AND expr   /*{
-    if($1->exprType.type == T_BOOL && $3->exprType.type == T_BOOL && $1->exprType.isArray == false && $3->exprType.isArray == false) 
-        $$ = create_bool_expr($1->boolvalue && $3->boolvalue); 
-    else 
-        yyerror("for binary '&&' operator both operands must be of type bool\n"); 
-    free_expr($1);
-    free_expr($3); 
-    }*/
-
-|   expr OR expr     /*{
-    if($1->exprType.type == T_BOOL && $3->exprType.type == T_BOOL && $1->exprType.isArray == false && $3->exprType.isArray == false) 
-        $$ = create_bool_expr($1->boolvalue || $3->boolvalue); 
-    else 
-        yyerror("for binary '||' operator both operands must be of type bool\n"); 
-    free_expr($1);
-    free_expr($3); 
-    }*/
-|   '!' expr   /*{
-    if($2->exprType.type == T_BOOL &&  $2->exprType.isArray == false) 
-        $$ = create_bool_expr(!$2->boolvalue); 
-    else 
-        yyerror("for unary '!' operator the operand must be of type bool"); 
-    free_expr($2);
-    }*/
-|   expr EQ expr /*{createCompareOperation(&$1, &$3, &$$, OP_EQ);}*/
-|   expr NEQ expr /*{createCompareOperation(&$1, &$3, &$$, OP_NEQ);}*/
-|   expr LEQ expr /*{createCompareOperation(&$1, &$3, &$$, OP_LEQ);}*/
-|   expr GEQ expr /*{createCompareOperation(&$1, &$3, &$$, OP_GEQ);}*/
-|   expr '<' expr /*{createCompareOperation(&$1, &$3, &$$, OP_L);}*/
-|   expr '>' expr /*{createCompareOperation(&$1, &$3, &$$, OP_G);}*/
+|   expr AND expr   {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_AND;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr OR expr     {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_OR;
+        $$ = buildAST(input, $1, $3);
+}
+|   '!' expr   {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_NEG;
+        $$ = buildAST(input, $2, NULL);
+}
+|   expr EQ expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_EQ;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr NEQ expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_NEQ;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr LEQ expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_LEQ;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr GEQ expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_GEQ;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr '<' expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_LESSER;
+        $$ = buildAST(input, $1, $3);
+}
+|   expr '>' expr {
+        ASTInput input; bzero(&input, sizeof(ASTInput)); 
+        input.role = N_OP; input.op = O_GREATER;
+        $$ = buildAST(input, $1, $3);
+}
 ;
 
 exprs: exprs ',' expr
@@ -347,26 +417,474 @@ exprs: exprs ',' expr
 |   /*EMPTY*/;
 
 %%
- void id_assignment(char* name, Type type, int size, int value, bool isArray, bool isConst, bool isType, bool isAssigned ){
+
+value_struct* executeArithmeticOp(AST* left, AST* right, Operation op){
+    value_struct* value;
+    value_struct* leftVal;
+    value_struct* rightVal;
+    identif** id;
+
+    leftVal = evalAST(left);
+    rightVal = evalAST(right);
+    if((left != NULL && !(leftVal->type == T_INT || leftVal->type == T_FLOAT))||
+    (right != NULL && !(rightVal->type == T_INT || rightVal->type == T_FLOAT))){
+        yyerror("Invalid types for arithmetic operator, operands must be of type int or float");
+        return NULL;
+    }
+    
+
+    bool leftIsFloat = (leftVal->type == T_FLOAT);
+    bool rightIsFloat = (rightVal->type == T_FLOAT);
+    
+
+    switch(op){
+        case O_PLUS:
+            if(leftIsFloat && rightIsFloat){
+                value = createValue(T_FLOAT, 0, false, leftVal->floatvalue + rightVal->floatvalue, 0, NULL);
+            }
+            else if(leftIsFloat){
+                 value = createValue(T_FLOAT, 0, false, leftVal->floatvalue + (float)rightVal->intvalue, 0, NULL);
+            }
+            else if(rightIsFloat){
+                 value = createValue(T_FLOAT, 0, false, (float)leftVal->intvalue + rightVal->floatvalue, 0, NULL);
+            }
+            else{
+               
+                int left = leftVal->intvalue;
+                int right = rightVal->intvalue;
+                value = createValue(T_INT, leftVal->intvalue + rightVal->intvalue, false, 0.0 , 0, NULL);
+            }
+            break;
+        case O_MINUS:
+                    if(leftIsFloat && rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue - rightVal->floatvalue, 0, NULL);
+                    }
+                    else if(leftIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue - (float)rightVal->intvalue, 0, NULL);
+                    }
+                    else if(rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, (float)leftVal->intvalue - rightVal->floatvalue, 0, NULL);
+                    }
+                    else{
+                        value = createValue(T_INT, leftVal->intvalue - rightVal->intvalue, false, 0.0 , 0, NULL);
+                    }
+                    break;
+        case O_MULTIPLY:
+                    if(leftIsFloat && rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue * rightVal->floatvalue, 0, NULL);
+                    }
+                    else if(leftIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue * (float)rightVal->intvalue, 0, NULL);
+                    }
+                    else if(rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, (float)leftVal->intvalue * rightVal->floatvalue, 0, NULL);
+                    }
+                    else{
+                        value = createValue(T_INT, leftVal->intvalue * rightVal->intvalue, false, 0.0 , 0, NULL);
+                    }
+                    break;
+        case O_DEVIDE:
+                    if((rightIsFloat && rightVal->floatvalue == 0)||(!rightIsFloat && rightVal->intvalue == 0)){
+                        yyerror("Division by zero, change right value");
+                        return NULL;
+                    }
+                    
+                    if(leftIsFloat && rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue / rightVal->floatvalue, 0, NULL);
+                    }
+                    else if(leftIsFloat){
+                        value = createValue(T_FLOAT, 0, false, leftVal->floatvalue / (float)rightVal->intvalue, 0, NULL);
+                    }
+                    else if(rightIsFloat){
+                        value = createValue(T_FLOAT, 0, false, (float)leftVal->intvalue / rightVal->floatvalue, 0, NULL);
+                    }
+                    else{
+                        value = createValue(T_INT, leftVal->intvalue / rightVal->intvalue, false, 0.0 , 0, NULL);
+                    }
+                    break;
+        case O_PPL:
+                    id = lookupIdTableByName(left->idName);
+                    if((*id)->idType.type == T_INT){
+                        (*id)->value->intvalue = (*id)->value->intvalue + 1;
+                        value = createValue(T_INT, (*id)->value->intvalue, false, 0.0, 0, NULL);
+                    }
+                    else if((*id)->idType.type == T_FLOAT){
+                        (*id)->value->floatvalue = (*id)->value->floatvalue + 1;
+                        value = createValue(T_FLOAT, 0, false, (*id)->value->floatvalue, 0, NULL);
+                    }
+                    else{
+                        yyerror("Identifier must be of type int or float for arithmetic operation");
+                        return NULL;
+                    }
+                    break;                  
+        case O_PPR:
+                    id = lookupIdTableByName(left->idName);
+                    if((*id)->idType.type == T_INT){
+                        value = createValue(T_INT, (*id)->value->intvalue, false, 0.0, 0, NULL);
+                        (*id)->value->intvalue = (*id)->value->intvalue + 1;      
+                    }
+                    else if((*id)->idType.type == T_FLOAT){
+                        value = createValue(T_FLOAT, 0, false, (*id)->value->floatvalue, 0, NULL);
+                        (*id)->value->floatvalue = (*id)->value->floatvalue + 1;   
+                    }
+                    else{
+                        yyerror("Identifier must be of type int or float for arithmetic operation");
+                        return NULL;
+                    }
+                    break;                  
+        case O_MML:
+                    id = lookupIdTableByName(left->idName);
+                    if((*id)->idType.type == T_INT){
+                        (*id)->value->intvalue = (*id)->value->intvalue - 1;
+                        value = createValue(T_INT, (*id)->value->intvalue, false, 0.0, 0, NULL);
+                    }
+                    else if((*id)->idType.type == T_FLOAT){
+                        (*id)->value->floatvalue = (*id)->value->floatvalue - 1;
+                        value = createValue(T_FLOAT, 0, false, (*id)->value->floatvalue, 0, NULL);
+                    }
+                    else{
+                        yyerror("Identifier must be of type int or float for arithmetic operation");
+                        return NULL;
+                    }
+                    break;                  
+        case O_MMR:
+                    id = lookupIdTableByName(left->idName);
+                    if((*id)->idType.type == T_INT){
+                        value = createValue(T_INT, (*id)->value->intvalue, false, 0.0, 0, NULL);
+                        (*id)->value->intvalue = (*id)->value->intvalue - 1;      
+                    }
+                    else if((*id)->idType.type == T_FLOAT){
+                        value = createValue(T_FLOAT, 0, false, (*id)->value->floatvalue, 0, NULL);
+                        (*id)->value->floatvalue = (*id)->value->floatvalue - 1;   
+                    }
+                    else{
+                        yyerror("Identifier must be of type int or float for arithmetic operation");
+                        return NULL;
+                    }
+                    break;                  
+        case O_UMINUS:
+                if(leftIsFloat){
+                    value = createValue(T_FLOAT, 0, false, -leftVal->floatvalue, 0, NULL);
+                }
+                else{
+                     value = createValue(T_INT, -leftVal->intvalue, false, 0.0, 0, NULL);
+                }
+                break;
+    }
+    return value;
+}
+
+value_struct* executeLogicalOp(AST* left, AST* right, Operation op){
+    value_struct* value;
+    value_struct* leftVal;
+    value_struct* rightVal;
+
+    if(left == NULL){
+        yyerror("NULL values for logical operation");
+        return NULL;
+    }
+
+    if((left != NULL && left->value->type != T_BOOL)||
+    (op != O_NEG && (right == NULL || (right != NULL && right->value->type != T_BOOL)))){
+        yyerror("Invalid types for logical operation, operands must be of type bool");
+        return NULL;
+    }
+
+    leftVal = evalAST(left);
+    rightVal = evalAST(right);
+
+    switch(op){
+        case O_NEG:
+            value = createValue(T_BOOL, 0, !leftVal->boolvalue, 0.0, 0, NULL);
+        case O_AND:
+            value = createValue(T_BOOL, 0, leftVal->boolvalue && rightVal->boolvalue, 0.0, 0, NULL);
+        case O_OR:
+            value = createValue(T_BOOL, 0, leftVal->boolvalue || rightVal->boolvalue, 0.0, 0, NULL);
+    }
+
+    return value;
+}
+
+value_struct* executeComparisonOp(AST* left, AST* right, Operation op){
+    value_struct* value;
+    value_struct* leftVal;
+    value_struct* rightVal;
+
+    if(left == NULL || right == NULL){
+        yyerror("No values for comparison operation");
+        return NULL;
+    }
+
+    leftVal = evalAST(left);
+    rightVal = evalAST(right);
+    bool leftIsNumeric = (leftVal->type == T_FLOAT || leftVal->type == T_INT);
+    bool rightIsNumeric = (rightVal->type == T_FLOAT || rightVal->type == T_INT);
+
+    if(!(leftIsNumeric && rightIsNumeric) &&  leftVal->type != rightVal->type){
+        yyerror("Operators must both either be of numeric type, or of the same type for comparison operation");
+        return NULL;
+    }
+
+    switch(op){
+        case O_EQ:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue == rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue == rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue == rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue == rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) == 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue == rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue == rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+        case O_NEQ:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue != rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue != rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue != rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue != rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) != 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue != rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue != rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+        case O_LESSER:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue < rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue < rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue < rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue < rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) < 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue < rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue < rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+        case O_GREATER:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue > rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue > rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue > rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue > rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) > 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue > rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue > rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+        case O_LEQ:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue <= rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue <= rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue <= rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue <= rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) <= 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue <= rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue <= rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+        case O_GEQ:
+            switch(leftVal->type){
+                case T_INT:
+                    if(rightVal->type == T_FLOAT) value = createValue(T_BOOL, 0, leftVal->intvalue >= rightVal->floatvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->intvalue >= rightVal->intvalue, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    if(rightVal->type == T_INT) value = createValue(T_BOOL, 0, leftVal->floatvalue >= rightVal->intvalue, 0.0, 0, NULL);
+                    else value = createValue(T_BOOL, 0, leftVal->floatvalue >= rightVal->floatvalue, 0.0, 0, NULL);
+                    break;
+                case T_STRING:
+                    value = createValue(T_BOOL, 0, strcmp(leftVal->strvalue, rightVal->strvalue) >= 0, 0.0, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, leftVal->boolvalue >= rightVal->boolvalue, 0.0, 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_BOOL, 0, leftVal->charvalue >= rightVal->charvalue, 0.0, 0, NULL);
+                    break;
+                default:
+                    yyerror("Unsupported type");
+                    return NULL;
+            }
+            break;
+    }
+
+    return value;
+}
+
+void copyValue(value_struct** dest, value_struct** source){
+    memcpy((*dest), (*source), sizeof(value_struct));
+    if((*source)->strvalue != NULL){
+        (*dest)->strvalue = strdup((*source)->strvalue);
+    }
+}
+
+value_struct* createValue(Type t, int ival, bool bval, float fval, char cval, char* sval){
+    value_struct* value = (value_struct*)calloc(1, sizeof(value_struct));
+    value->type = t;
+    switch(t){
+        case T_INT:
+            value->intvalue = ival;
+            break;
+        case T_BOOL:
+            value->boolvalue = bval;
+            break;
+        case T_STRING:
+            if(sval != NULL) value->strvalue = strdup(sval);
+            else value->strvalue = sval;
+            break;
+        case T_CHAR:
+            value->charvalue = cval;
+            break;
+        case T_FLOAT:
+            value->floatvalue = fval;
+            break;
+        case T_USER:
+            value->strvalue = strdup("USER");
+            break;
+        default:
+            yyerror("Invalid type to createValue");
+    }
+
+    return value;
+}
+
+void freeValue(value_struct* value){
+    if(value != NULL){
+        if(value->strvalue != NULL) free(value->strvalue);
+        free(value);
+    }
+    
+}
+
+void id_assignment(char* name, Type type, int size, value_struct* value, bool isArray, bool isConst, bool isType, bool isAssigned ){
     type_struct typeInfo;
     typeInfo.type = type; typeInfo.isArray = isArray;
     identif* id = create_id(isConst, isType, isAssigned, name, typeInfo);
     free(name);
     if(isArray){
         id->arrSize = size;
-        id->intArray = (int*)malloc(sizeof(int)*size);
-        if(isAssigned){
-            for(int i = 0; i < size; ++i){
-                id->intArray[i] = value;
+        switch(type){
+        case T_INT:
+            id->intArray = (int*)malloc(sizeof(int)*size);
+            if(isAssigned){
+                for(int i = 0; i < size; ++i){
+                    id->intArray[i] = value->intvalue;
+                }
             }
+            else bzero(id->intArray, sizeof(int)*size);
+            break;
+
+        case T_BOOL:
+            id->boolArray = (bool*)malloc(sizeof(bool)*size);
+            if(isAssigned){
+                for(int i = 0; i < size; ++i){
+                    id->boolArray[i] = value->boolvalue;
+                }
+            }
+            else bzero(id->boolArray, sizeof(bool)*size);
+            break;
+
+        case T_STRING:
+            id->strArray = (char**)malloc(sizeof(char*)*size);
+            if(isAssigned){
+                for(int i = 0; i < size; ++i){
+                    id->strArray[i] = strdup(value->strvalue);
+                }
+            }
+            else bzero(id->strArray, sizeof(char*)*size);
+            break;
+
+        case T_CHAR:
+            id->charArray = (char*)malloc(sizeof(char)*size);
+            if(isAssigned){
+                for(int i = 0; i < size; ++i){
+                    id->charArray[i] = value->charvalue;
+                }
+            }
+            else bzero(id->charArray, sizeof(char)*size);
+            break;
+
+        case T_FLOAT:
+            id->floatArray = (float*)malloc(sizeof(float)*size);
+            if(isAssigned){
+                for(int i = 0; i < size; ++i){
+                    id->floatArray[i] = value->floatvalue;
+                }
+            }
+            else bzero(id->floatArray, sizeof(float)*size);
+            break;         
         }
-        else bzero(id->intArray, sizeof(int)*size);
-     }
+    }
      else{
-         if(isAssigned) id->intvalue = value;
+        id->value = value;
      }
+
     id_table[fillAmount++] = id;  
- }
+}
 
 AST* buildAST(ASTInput in, AST* child1, AST* child2){
     AST* root = (AST*)malloc(sizeof(AST));
@@ -387,73 +905,123 @@ AST* buildAST(ASTInput in, AST* child1, AST* child2){
             root->idName = strdup(in.string);
             break;
         case N_INTEGER:
-            root->intvalue = in.value;
+        case N_FLOAT:
+        case N_BOOLEAN:
+        case N_CHARACHTER:
+        case N_STRING:
+            root->value = in.value;
             break;
     }
 
     return root;
 }
 
-int evalAST(AST* root){
-    if(root == NULL) return 0;
+value_struct* evalAST(AST* root){
+    if(root == NULL) return createValue(T_INT, 0, false, 0, 0, NULL);
     identif** id;
-    int left, right;
+    value_struct* value;
 
     switch(root->role){
         case N_OP:
-            left = evalAST(root->left);
-            printf("\nEvaluated left\n");
-            right = evalAST(root->right);
-            printf("\nEvaluated right\n");
             switch(root->op){
                 case O_PLUS:
-                    return left + right;
                 case O_MINUS:
-                    return left - right;
                 case O_MULTIPLY:
-                    return left * right;
                 case O_DEVIDE:
-                    if(right == 0){
-                        yyerror("Division by zero, change left value");
-                        return 0;
-                    }
-                    else return left/right;
                 case O_PPL:
-                    id = lookupIdTableByName(root->left->idName);
-                    (*id)->intvalue = (*id)->intvalue + 1;
-                    return left + 1;
                 case O_PPR:
-                    id = lookupIdTableByName(root->left->idName);
-                    (*id)->intvalue = (*id)->intvalue + 1;
-                    return left;
                 case O_MML:
-                    id = lookupIdTableByName(root->left->idName);
-                    (*id)->intvalue = (*id)->intvalue - 1;
-                    return left - 1;
                 case O_MMR:
-                    id = lookupIdTableByName(root->left->idName);
-                    (*id)->intvalue = (*id)->intvalue - 1;
-                    return left;
                 case O_UMINUS:
-                    return -left;
+                    value = executeArithmeticOp(root->left, root->right, root->op);
+                    break;
+                case O_NEG:
+                case O_AND:
+                case O_OR:
+                    value = executeLogicalOp(root->left, root->right, root->op);
+                    break;
+                case O_EQ:
+                case O_NEQ:
+                case O_LESSER:
+                case O_GREATER:
+                case O_LEQ:
+                case O_GEQ:
+                    value = executeComparisonOp(root->left, root->right, root->op);
+                    break;
             }
+            if(value == NULL) return createValue(T_INT, 0, false, 0.0, 0, NULL);
+            else return value;
         case N_ARRAY_ELEM:
             id = lookupIdTableByName(root->idName);
             if(root->index < 0 ||  root->index >= (*id)->arrSize){
                 char error[512];
                 sprintf(error, "Array index out of range, array %s at index %d",root->idName, root->index);
                 yyerror(error);
-                return 0;
+                return createValue(T_INT, 0, false, 0.0, 0, NULL);
             }
-            return (*id)->intArray[root->index];
+
+            switch((*id)->idType.type){
+                case T_INT:
+                    value = createValue(T_INT, (*id)->intArray[root->index], false, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    value = createValue(T_FLOAT, 0, false, (*id)->floatArray[root->index], 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, (*id)->boolArray[root->index], 0.0 , 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_CHAR, 0, false, 0.0 , (*id)->charArray[root->index], NULL);
+                    break;
+                 case T_STRING:
+                    value = createValue(T_STRING, 0, false, 0.0 , 0, (*id)->strArray[root->index]);
+                    break;
+                default:
+                    yyerror("Expresion contains invalid type");
+                    value = createValue(T_INT, 0, false, 0.0, 0, NULL);
+                    break;
+            }
+            return value;
+
         case N_OTHER:
-            return 0;
+            return createValue(T_INT, 0, false, 0.0, 0, NULL);
         case N_IDENTIFIER:
-            ;
             id = lookupIdTableByName(root->idName);
-            return (*id)->intvalue;
+            if((*id)->idType.isArray){
+                switch((*id)->idType.type){
+                case T_INT:
+                    value = createValue(T_INT, (*id)->value->intvalue, false, 0.0, 0, NULL);
+                    break;
+                case T_FLOAT:
+                    value = createValue(T_FLOAT, 0, false, (*id)->value->floatvalue, 0, NULL);
+                    break;
+                case T_BOOL:
+                    value = createValue(T_BOOL, 0, (*id)->value->boolvalue, 0.0 , 0, NULL);
+                    break;
+                case T_CHAR:
+                    value = createValue(T_CHAR, 0, false, 0.0 , (*id)->value->charvalue, NULL);
+                    break;
+                 case T_STRING:
+                    value = createValue(T_STRING, 0, false, 0.0 , 0, (*id)->value->strvalue);
+                    break;
+                default:
+                    yyerror("Expresion contains invalid type");
+                    value = createValue(T_INT, 0, false, 0.0, 0, NULL);
+                    break;
+                }
+                return value;
+            }
+            value = (value_struct*)calloc(1, sizeof(value_struct));
+            copyValue(&value, &(*id)->value);
+            return value;
         case N_INTEGER:
-            return root->intvalue;
+        case N_FLOAT:
+        case N_BOOLEAN:
+        case N_CHARACHTER:
+        case N_STRING:
+            value = (value_struct*)calloc(1, sizeof(value_struct));
+            copyValue(&value, &root->value);
+            return value;
     }
 }
 
@@ -462,246 +1030,15 @@ void free_tree(AST* root){
         free_tree(root->left);
         free_tree(root->right);
         if(root->idName != NULL) free(root->idName);
-        if(root->strvalue != NULL) free(root->strvalue);
+        if(root->value != NULL) freeValue(root->value);
         free(root);
     }
 }
 
 
-
-/* 
-void createCompareOperation(expression** expr1, expression** expr2, expression** expr3, Comparison op){
-    char err[264] = {0};
-    if((*expr1)->exprType.type == (*expr2)->exprType.type && (*expr1)->exprType.isArray == false && (*expr2)->exprType.isArray == false){
-        switch ((*expr2)->exprType.type)
-        {
-        case T_INT:
-            switch (op)
-            {
-                case OP_EQ:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue == (*expr2)->intvalue);
-                    break;
-                case OP_NEQ:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue != (*expr2)->intvalue);
-                    break;
-                case OP_LEQ:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue <= (*expr2)->intvalue);
-                    break;
-                case OP_GEQ:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue >= (*expr2)->intvalue);
-                    break;
-                case OP_L:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue < (*expr2)->intvalue);
-                    break;
-                case OP_G:
-                    (*expr3) = create_bool_expr((*expr1)->intvalue > (*expr2)->intvalue);
-                    break;
-                default:
-                    sprintf(err, "Invalid comaprison operation");
-                    yyerror(err);
-            }       
-            break;
-        case T_CHAR:
-            switch (op)
-            {
-                case OP_EQ:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue == (*expr2)->charvalue);
-                    break;
-                case OP_NEQ:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue != (*expr2)->charvalue);
-                    break;
-                case OP_LEQ:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue <= (*expr2)->charvalue);
-                    break;
-                case OP_GEQ:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue >= (*expr2)->charvalue);
-                    break;
-                case OP_L:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue < (*expr2)->charvalue);
-                    break;
-                case OP_G:
-                    (*expr3) = create_bool_expr((*expr1)->charvalue > (*expr2)->charvalue);
-                    break;
-                default:
-                    sprintf(err, "Invalid comaprison operation");
-                    yyerror(err);
-            }       
-            break;
-        case T_FLOAT:
-            switch(op){
-                case OP_EQ:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue == (*expr2)->floatvalue);
-                    break;
-                case OP_NEQ:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue != (*expr2)->floatvalue);
-                    break;
-                case OP_LEQ:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue <= (*expr2)->floatvalue);
-                    break;
-                case OP_GEQ:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue >= (*expr2)->floatvalue);
-                    break;
-                case OP_L:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue < (*expr2)->floatvalue);
-                    break;
-                case OP_G:
-                    (*expr3) = create_bool_expr((*expr1)->floatvalue > (*expr2)->floatvalue);
-                    break;
-                default:
-                    sprintf(err, "Invalid comaprison operation");
-                    yyerror(err);
-            }       
-            break;
-        case T_STRING:
-            switch(op){
-                    case OP_EQ:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) == 0);
-                        break;
-                    case OP_NEQ:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) != 0);
-                        break;
-                    case OP_LEQ:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) <= 0);
-                        break;
-                    case OP_GEQ:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) >= 0);
-                        break;
-                    case OP_L:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) < 0);
-                        break;
-                    case OP_G:
-                        (*expr3) = create_bool_expr(strcmp((*expr1)->strvalue, (*expr2)->strvalue) > 0);
-                        break;
-                    default:
-                        sprintf(err, "Invalid comaprison operation");
-                        yyerror(err);
-                }       
-                break;
-        case T_BOOL:
-            switch(op){
-                    case OP_EQ:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue == (*expr2)->boolvalue);
-                        break;
-                    case OP_NEQ:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue != (*expr2)->boolvalue);
-                        break;
-                    case OP_LEQ:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue <= (*expr2)->boolvalue);
-                        break;
-                    case OP_GEQ:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue >= (*expr2)->boolvalue);
-                        break;
-                    case OP_L:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue < (*expr2)->boolvalue);
-                        break;
-                    case OP_G:
-                        (*expr3) = create_bool_expr((*expr1)->boolvalue > (*expr2)->boolvalue);
-                        break;
-                    default:
-                        sprintf(err, "Invalid comaprison operation");
-                        yyerror(err);
-                }       
-                break;
-       
-        default:
-            sprintf(err, "invalid type for comparison operator");
-            yyerror(err);
-            break;
-        }
-    }
-    else {
-            sprintf(err, "for comparison operator both operands must be of same type");
-            yyerror(err); 
-        }
-    if(!(*expr1)->isLvalue) free_expr((*expr1));
-    if(!(*expr2)->isLvalue) free_expr((*expr2));
-}
-
-void createBinaryOperation(expression** expr1, expression** expr2, expression** expr3, char op){   
-    char err[264] = {0};
-    if((*expr1)->exprType.type == (*expr2)->exprType.type && (*expr1)->exprType.isArray == false && (*expr2)->exprType.isArray == false){
-        switch ((*expr2)->exprType.type)
-        {
-        case T_INT:
-            switch (op)
-            {
-                case '+':
-                    (*expr3) = create_int_expr((*expr1)->intvalue + (*expr2)->intvalue);
-                    break;
-                case '*':
-                    (*expr3) = create_int_expr((*expr1)->intvalue * (*expr2)->intvalue);
-                    break;
-                case '-':
-                    (*expr3) = create_int_expr((*expr1)->intvalue - (*expr2)->intvalue);
-                    break;
-                case '/':
-                    (*expr3) = create_int_expr((*expr1)->intvalue / (*expr2)->intvalue);
-                    break;
-            }       
-            break;
-        case T_CHAR:
-            switch (op)
-            {
-                case '+':
-                    (*expr3) = create_char_expr((*expr1)->charvalue + (*expr2)->charvalue);
-                    break;
-                case '*':
-                    (*expr3) = create_char_expr((*expr1)->charvalue * (*expr2)->charvalue);
-                    break;
-                case '-':
-                    (*expr3) = create_char_expr((*expr1)->charvalue - (*expr2)->charvalue);
-                    break;
-                case '/':
-                    (*expr3) = create_char_expr((*expr1)->charvalue / (*expr2)->charvalue);
-                    break;
-            }       
-            break;
-        case T_FLOAT:
-            switch (op)
-            {
-                case '+':
-                    (*expr3) = create_float_expr((*expr1)->floatvalue + (*expr2)->floatvalue);
-                    break;
-                case '*':
-                    (*expr3) = create_float_expr((*expr1)->floatvalue * (*expr2)->floatvalue);
-                    break;
-                case '-':
-                    (*expr3) = create_float_expr((*expr1)->floatvalue - (*expr2)->floatvalue);
-                    break;
-                case '/':
-                    (*expr3) = create_float_expr((*expr1)->floatvalue / (*expr2)->floatvalue);
-                    break;
-            }       
-            break;
-        default:
-            sprintf(err, "one or both of the operands for '%c' is non-numeric", op);
-            yyerror(err);
-            break;
-        }
-    }
-    else {
-            sprintf(err, "for binary '%c' operator both operands must be of same type", op);
-            yyerror(err); 
-        }
-    if(!(*expr1)->isLvalue) free_expr((*expr1));
-    if(!(*expr2)->isLvalue) free_expr((*expr2));
-} */
-
-/* void lookupIdTable(identif** id){
-    for(int i = 0; i < fillAmount; ++i){
-        if(id_table[i] != NULL && strcmp((*id)->name, id_table[i]->name) == 0 ){
-            free_id(*id);
-            *id = id_table[i];
-            return;
-        }
-    }
-    printf("match not found\n");
-}
-*/
 identif** lookupIdTableByName(char* s){
     for(int i = 0; i < fillAmount; ++i){
         if(id_table[i] != NULL && strcmp(s, id_table[i]->name) == 0 ){
-            printf(" match found \n");
             return &id_table[i];
         }
     }
@@ -711,14 +1048,34 @@ identif** lookupIdTableByName(char* s){
 
 void print(char* string, AST* root){
     printf("%s", string);
+
     if(root == NULL){
         printf ("NULL VAL\n");
         return;
     }
-    int value = evalAST(root);
-    printf("\nFinsished print eval\n");
-    printf("%d", value);
-    
+
+    value_struct* value = evalAST(root);
+    switch(value->type){
+        case T_INT:
+            printf("%d", value->intvalue);
+            break;
+        case T_FLOAT:
+            printf("%f", value->floatvalue);
+            break;
+        case T_CHAR:
+            printf("%c", value->charvalue);
+            break;
+        case T_BOOL:
+            ;
+            char* response = value->boolvalue ? "true":"false";
+            printf("%s", response);
+            break;
+        case T_STRING:
+            printf("%s", value->strvalue);
+            break;
+    }
+
+    freeValue(value);  
 } 
 
 
@@ -740,19 +1097,6 @@ identif* create_id(bool isConst, bool isType, bool isAssigned, char* Name, type_
 
     return id;
 }
-/*
-void fill_id(identif* id, bool isConst, bool isType, bool isAssigned, int index, type_struct type, expression* expr){
-    id->isConst = isConst;
-    id->isType = isType;
-    id->idType = type;
-    id->value = expr;
-    id->isAssigned = isAssigned;
-    if(expr != NULL){
-        expr->idName = strdup(id->name);
-        expr->index = index;
-        expr->isLvalue = true;
-    }
-} */
  
 void free_id(identif* id){
     if(id != NULL){
@@ -760,7 +1104,7 @@ void free_id(identif* id){
     if(id->intArray != NULL) free(id->intArray);
     if(id->floatArray != NULL) free(id->floatArray);
     if(id->boolArray != NULL) free(id->boolArray);
-    if(id->strvalue != NULL) free(id->strvalue);
+    if(id->value != NULL) freeValue(id->value);
     if(id->strArray != NULL){
         for(int i = 0; i < id->arrSize; i++){
             if(id->strArray[i] != NULL){
@@ -771,111 +1115,12 @@ void free_id(identif* id){
     free(id);
     }
 }
-/*
-expression* create_int_expr(int value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    expr->intvalue = value;
-    expr->exprType.type = T_INT;
-    expr->exprType.isArray == false;
-    expr->isLvalue = false;
-    expr->idName = NULL;
-    return expr;
-}
 
-expression* create_char_expr(char value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    expr->charvalue = value;
-    expr->exprType.type = T_CHAR;
-    expr->exprType.isArray == false;
-    expr->isLvalue = false;
-    expr->idName = NULL;
-    return expr;
-}
-
-expression* create_bool_expr(bool value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    expr->boolvalue = value;
-    expr->exprType.type = T_BOOL;
-    expr->exprType.isArray == false;
-    expr->isLvalue = false;
-    expr->idName = NULL;
-    return expr;
-}
-
-expression* create_float_expr(float value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    expr->floatvalue = value;
-    expr->exprType.type = T_FLOAT;
-    expr->exprType.isArray == false;
-    expr->isLvalue = false;
-    expr->idName = NULL;
-    return expr;
-}
-
-expression* create_str_expr(char* value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    if(value == NULL) expr->strvalue = NULL;
-    else expr->strvalue = strdup(value);
-    expr->exprType.type = T_STRING;
-    expr->exprType.isArray == false;
-    expr->isLvalue = false;
-    expr->idName = NULL;
-    return expr;
-}
-
-expression* create_expr_expr(expression* value){
-    expression* expr = (expression*)malloc(sizeof(expression));
-    expr->exprType.isArray = value->exprType.isArray;
-    expr->isLvalue = value->isLvalue;
-    if(expr->isLvalue){
-        expr->idName = strdup(value->idName);
+void freeIdTable(){
+    for(int i = 0; i < fillAmount; ++i){
+        free(id_table[i]);
     }
-    switch(value->exprType.type)
-    {
-        case T_INT:
-            expr->exprType.type = T_INT;
-            expr->intvalue = value->intvalue;
-            break;
-
-        case T_FLOAT:
-            expr->exprType.type = T_FLOAT;
-            expr->floatvalue = value->floatvalue;
-            break;
-
-        case T_STRING:
-            expr->exprType.type = T_STRING;
-            expr->strvalue = strdup(value->strvalue);
-            break;
-
-        case T_CHAR:
-            expr->exprType.type = T_CHAR;
-            expr->charvalue = value->charvalue;
-            break;
-
-        case T_BOOL:
-            expr->exprType.type = T_BOOL;
-            expr->boolvalue = value->boolvalue;
-            break;
-
-        default:
-            yyerror("Feature not implemented yet");
-    }
-
-    return expr;
 }
-
-void free_expr(expression* expr){
-    if(expr != NULL){
-        if(expr->exprType.type == T_STRING && expr->strvalue != NULL)
-        {
-            free(expr->strvalue);
-        }
-        if(expr->idName != NULL){
-            free(expr->idName);
-        }
-        free(expr);
-    }
-} */
 
 void yyerror(char* s){
     printf("\neroare: %s la linia:%d\n", s, yylineno);

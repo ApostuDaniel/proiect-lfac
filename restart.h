@@ -3,15 +3,6 @@
 
 #include <stdbool.h>
 
-typedef enum{
-    OP_EQ,
-    OP_NEQ,
-    OP_LEQ,
-    OP_GEQ,
-    OP_L,
-    OP_G
-} Comparison;
-
 typedef enum 
 {
     T_INT,
@@ -40,10 +31,10 @@ typedef enum{
     N_OP,
     N_IDENTIFIER,
     N_INTEGER,
-    // N_FLOAT,
-    // N_BOOLEAN,
-    // N_CHARACHTER,
-    // N_STRING,
+    N_FLOAT,
+    N_BOOLEAN,
+    N_CHARACHTER,
+    N_STRING,
     N_ARRAY_ELEM,
     N_OTHER
 } NodeType;
@@ -63,7 +54,7 @@ typedef enum{
     O_OR,
     O_EQ,
     O_NEQ,
-    O_LESSES,
+    O_LESSER,
     O_GREATER,
     O_LEQ,
     O_GEQ,
@@ -77,12 +68,7 @@ typedef struct Node
     Operation op;
     char* idName;
     int index;
-    int intvalue;
-    char* strvalue;
-    float floatvalue;
-    char charvalue;
-    bool boolvalue;
-    Type type;
+    value_struct* value;
 } AST;
 
 typedef struct 
@@ -91,7 +77,7 @@ typedef struct
     char* string;
     NodeType role;
     int index;
-    int value;
+    value_struct* value;
 } ASTInput;
 
 
@@ -102,14 +88,11 @@ typedef struct{
     bool isType;
     type_struct idType;
     int arrSize;
-    int intvalue;
+    value_struct* value;
     int* intArray;
-    char* strvalue;
+    char* charArray;
     char** strArray;
-    float floatvalue;
     float* floatArray;
-    char charvalue;
-    bool boolvalue;
     bool* boolArray;  
 } identif;
 

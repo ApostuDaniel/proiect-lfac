@@ -46,6 +46,7 @@
 \"[^"]* {yylval.strval = strndup(yytext+1, yyleng-1); input(); printf("%s", yylval.strval); return STRINGCONST;}
 \'.\' {yylval.charval = yytext[1];printf("%c", yylval.charval); return CHARCONST;}
 [_a-zA-Z][_a-zA-Z0-9]* {yylval.strval = strdup(yytext); printf("%s", yylval.strval); return ID;}
+"//"[^\n]* {printf("comment");}
 [ \t] {printf("%s", yytext);};
 \n {yylineno++;printf("\n");}
 . {printf("%c", yytext[0]);return yytext[0];}
