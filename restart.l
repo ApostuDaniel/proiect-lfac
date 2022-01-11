@@ -50,5 +50,5 @@
 [ \t] {printf("%s", yytext);};
 \n {yylineno++;printf("\n");}
 . {printf("%c", yytext[0]);return yytext[0];}
-<<EOF>> {printf("end_of_file\n"); yyterminate();}
+<<EOF>> {printf("\n"); yyterminate();}
 %%

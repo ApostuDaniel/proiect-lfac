@@ -1,0 +1,52 @@
+global{
+    var int i;
+    const bool j <- true;
+    var string k <- "test string";
+    const char c <- 'k';
+    var float f <- 33.5;
+    var int[4] arr <- {24}; 
+    var int[4] arr2;
+    const float[3] arr3 <- {3.5};
+    
+}
+
+newtype floor {
+    var int tiles <- 5;
+    var string color <- "blue";
+};
+
+func testFunc takes (int i, int j, floor l) returns null{
+    i <- j;
+    return l.tiles;
+}
+
+start:{
+   var floor newFloor;
+   newFloor.tiles <- 5;
+   newFloor.color <- "red";
+
+    while(true){
+        if(j == true) then {
+            newFloor.tiles <- testFunc(arr[1] , arr[2], newFloor);
+            testFunc((arr[1]+arr[2])*2, newFloor.tiles - arr[1]/arr[2] + testFunc(1, 2, newFloor), newFloor);
+        }
+        else{
+            arr[1] <- arr[2];
+        }
+    }
+
+    if(!false) then {
+        for(i <- 0; i < 5; ++i){
+            ++i;
+        }
+    }
+
+
+   Print("int from array ", arr[2]);
+   Print("const bool ", j);
+   Print("charachter ", 'c');
+   Print("var float ", f);
+   Print("var string ", k);
+
+   return i;
+}

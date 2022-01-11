@@ -83,6 +83,7 @@
 %type <expr_tree> expr
 %type <expr_tree> constant
 %type <tip> type;
+%type <strval> id;
 
 %start s
 %%
@@ -125,6 +126,9 @@ var_def: VAR type ID {id_assignment($3, $2, -1, NULL, false, false, false, false
 |   CONST ID'['INTCONST']' ID {id_assignment($6, T_USER, $4, NULL, true, true, false, false );}
 ;
 
+id: ID {$$ = strdup($1); free($1);}
+|   id '.' ID{$$ = calloc(1, sizeof(char) * (strlen($1) + strlen($3))); strcat($$, $1); strcat($$, "."); strcat($$, $3); free($1); free($3);}
+;
 
 type: STRING {$$ = T_STRING; }
 |   FLOAT   {$$ = T_FLOAT; }
@@ -195,7 +199,7 @@ statement:  com_stmt '}'
 |   RETURN expr ';'
 |   var_def ';'
 |   expr ';'
-|   PRINT '(' STRINGCONST ',' expr ')' ';' {printf("\nStarted print\n");print($3, $5);printf("\nFinished print\n"); free($3); free_tree($5);}
+|   PRINT '(' STRINGCONST ',' expr ')' ';' {print($3, $5); free($3); free_tree($5);}
 |     ';'
 ; 
 
@@ -204,31 +208,115 @@ statement:  com_stmt '}'
 com_stmt: '{'
 |       com_stmt statement; 
 
-expr: constant {$$ = $1;}
-|   ID  {
-    identif** id = lookupIdTableByName($1);
-    if(id == NULL) yyerror("Can't use an undefined identifier in an expression");
-    else if(!(*id)->isAssigned) yyerror("Can't use an unassigned identifier in an expression");
-    else
-    {
-        ASTInput input; bzero(&input, sizeof(ASTInput)); 
-        input.role = N_IDENTIFIER; input.string = strdup((*id)->name); $$ = buildAST(input, NULL, NULL);
-        free(input.string);
-    }
-}
 
-|   ID ASSGN expr {
+expr: constant {$$ = $1;}
+|   id '[' expr ']' ASSGN expr{
+    if(strchr($1, '.') != NULL){
+        ASTInput input;  
+        input.role = N_OTHER; 
+        input.string = "array_access";
+        $$ = buildAST(input, NULL, NULL);
+    }
+    else{
+        identif** id = lookupIdTableByName($1);
+        if(id == NULL) {yyerror("Can't use an undefined identifier in an expression");}
+        else if((*id)->isConst){yyerror("Can't assign value to const identifier");}
+        else if((*id)->idType.isArray == false){yyerror("Can't use array acces brackets on non-array identifier");}
+        else{
+            value_struct* value = evalAST($6);
+            free_tree($6);
+            value_struct* index = evalAST($3);
+            free_tree($3);
+
+            if((*id)->idType.type != value->type){
+                yyerror("Both sides of the assignment must be of the same type");
+            }
+            else if(index->type != T_INT){
+                yyerror("Array access index must be of integer type");
+            }
+            else if(index->intvalue >=(*id)->arrSize || index->intvalue < 0){
+                yyerror("Array access index out of bounds");
+            }
+            else {
+                (*id)->isAssigned = true;
+                switch((*id)->idType.type)
+                {
+                    case T_INT:
+                        (*id)->intArray[index->intvalue] = value->intvalue;
+                        break;
+                    case T_FLOAT:
+                        (*id)->floatArray[index->intvalue] = value->floatvalue;
+                        break;
+                    case T_BOOL:
+                        (*id)->boolArray[index->intvalue] = value->boolvalue;
+                        break;
+                    case T_CHAR:
+                        (*id)->charArray[index->intvalue] = value->charvalue;
+                        break;
+                    case T_STRING:
+                        (*id)->strArray[index->intvalue] = strdup(value->strvalue);
+                        break;
+                    default:
+                        yyerror("Can't use assignment on user defined types");
+                } 
+            }
+            
+            ASTInput input; bzero(&input, sizeof(ASTInput)); 
+            input.role = N_ARRAY_ELEM; input.string = strdup((*id)->name); input.index = index->intvalue; $$ = buildAST(input, NULL, NULL);
+            free(input.string);
+            freeValue(index);
+        }
+    }
+    }
+|   id  {
+    if(strchr($1, '.') != NULL){
+        ASTInput input;  
+        input.role = N_OTHER; 
+        input.string = "member_access";
+        $$ = buildAST(input, NULL, NULL);
+    }
+    else{
         identif** id = lookupIdTableByName($1);
         if(id == NULL) yyerror("Can't use an undefined identifier in an expression");
         else if(!(*id)->isAssigned) yyerror("Can't use an unassigned identifier in an expression");
-        else if((*id)->isConst){yyerror("Can't assign value to const identifier"); exit(1);}
-        else{
-            (*id)->value = evalAST($3);
-            free_tree($3);
+        else
+        {
             ASTInput input; bzero(&input, sizeof(ASTInput)); 
             input.role = N_IDENTIFIER; input.string = strdup((*id)->name); $$ = buildAST(input, NULL, NULL);
             free(input.string);
         }
+        }
+    }
+
+|   id ASSGN expr {
+    if(strchr($1, '.') != NULL){
+        ASTInput input;  
+        input.role = N_OTHER; 
+        input.string = "member_access";
+        $$ = buildAST(input, NULL, NULL);
+    }
+    else{
+        identif** id = lookupIdTableByName($1);
+        if(id == NULL) {yyerror("Can't use an undefined identifier in an expression");}
+        else if((*id)->isConst){yyerror("Can't assign value to const identifier");}
+        else{
+            value_struct* value = evalAST($3);
+            free_tree($3);
+
+            if((*id)->idType.type != value->type){
+                yyerror("Both sides of the assignment must be of the same type");
+            }
+            else {
+                (*id)->value = value;
+                (*id)->isAssigned = true;
+            }
+
+            
+            ASTInput input; bzero(&input, sizeof(ASTInput)); 
+            input.role = N_IDENTIFIER; input.string = strdup((*id)->name); $$ = buildAST(input, NULL, NULL);
+            free(input.string);
+        }
+    }
     }
     
 |   '(' expr ')'    {
@@ -260,25 +348,38 @@ expr: constant {$$ = $1;}
         input.value = value; $$ = buildAST(input, NULL, NULL);
         free_tree($2);
     }
-|   ID '[' expr ']'{
+|   id '[' expr ']'{
+    if(strchr($1, '.') != NULL){
+        ASTInput input;  
+        input.role = N_OTHER; 
+        input.string = "array_access";
+        $$ = buildAST(input, NULL, NULL);
+    }
+    else{
         identif** id = lookupIdTableByName($1);
         if(id == NULL) yyerror("Can't use an undefined identifier in an expression");
         else if(!(*id)->isAssigned) yyerror("Can't use an unassigned identifier in an expression");
         else{
             value_struct* index = evalAST($3);
+            free_tree($3);
             if(index->type != T_INT){
                 yyerror("Array access index is not integer");
-                exit(1);
             }
-            free_tree($3);
-            ASTInput input; bzero(&input, sizeof(ASTInput)); 
-            input.role = N_ARRAY_ELEM; input.string = strdup((*id)->name); input.index = index->intvalue; 
-            $$ = buildAST(input, NULL, NULL);
-            free(input.string);
+            else{
+                ASTInput input; bzero(&input, sizeof(ASTInput)); 
+                input.role = N_ARRAY_ELEM; input.string = strdup((*id)->name); input.index = index->intvalue; 
+                $$ = buildAST(input, NULL, NULL);
+                free(input.string);
+            }  
         }
     }
-|   expr '(' exprs ')'
-|   expr '.' ID
+    }
+|   expr '(' exprs ')'  {
+        ASTInput input;  
+        input.role = N_OTHER; 
+        input.string = "function_call";
+        $$ = buildAST(input, NULL, NULL);
+    }
 |   expr '+' expr   {
         ASTInput input; 
         input.role = N_OP; input.op = O_PLUS;
@@ -584,14 +685,13 @@ value_struct* executeLogicalOp(AST* left, AST* right, Operation op){
         return NULL;
     }
 
-    if((left != NULL && left->value->type != T_BOOL)||
-    (op != O_NEG && (right == NULL || (right != NULL && right->value->type != T_BOOL)))){
+    leftVal = evalAST(left);
+    rightVal = evalAST(right);
+
+    if((rightVal->type != T_BOOL && leftVal->type != T_BOOL && op != O_NEG) || ( leftVal->type != T_BOOL)){
         yyerror("Invalid types for logical operation, operands must be of type bool");
         return NULL;
     }
-
-    leftVal = evalAST(left);
-    rightVal = evalAST(right);
 
     switch(op){
         case O_NEG:
@@ -1123,7 +1223,7 @@ void freeIdTable(){
 }
 
 void yyerror(char* s){
-    printf("\neroare: %s la linia:%d\n", s, yylineno);
+    fprintf(stderr, "\neroare: %s la linia:%d\n", s, yylineno);
 }
 
 int main(int argc, char** argv){
