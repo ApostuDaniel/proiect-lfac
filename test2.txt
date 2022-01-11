@@ -1,9 +1,0 @@
-global{
-    var int i <- 2;
-    var int j <- 4;
-}
-
-start:{
-    Print("++i ", --i);
-    Print("i ", i);
-}
