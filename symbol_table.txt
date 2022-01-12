@@ -1,0 +1,30 @@
+
+SYMBOL   DATATYPE   TYPE   LINE NUMBER   VALUE   DEFINED IN
+_____________________________________________________________
+empty	int	Variabila	2	(null)	Global	
+i	int	Variabila	3	0	Global	
+true	bool	Constanta	4	true	Global	
+j	bool	Constanta	4	true	Global	
+"test string	string	Constanta	5	"test string	Global	
+k	string	Variabila	5	test string	Global	
+'k'	char	Constanta	6	k	Global	
+c	char	Constanta	6	k	Global	
+33.5	float	Constanta	7	33.500000	Global	
+f	float	Variabila	7	33.500000	Global	
+24	int	Constanta	8	24	Global	
+arr	int	Variabila	8	24	Global	
+arr2	int	Variabila	9	(null)	Global	
+3.5	float	Constanta	10	3.500000	Global	
+arr3	float	Constanta	10	(null)	Global	
+floor	user	Constanta	14	newtype	Global	
+5	int	Constanta	15	5	User Defined	
+tiles	int	Variabila	15	5	User Defined	
+"blue	string	Constanta	16	"blue	User Defined	
+color	string	Variabila	16	blue	User Defined	
+newFloor	user	Variabila	25	(null)	In Start	
+"red	string	Constanta	27	"red	In Start	
+1	int	Constanta	31	1	In Start	
+2	int	Constanta	31	2	In Start	
+false	bool	Constanta	39	false	In Start	
+0	int	Constanta	40	0	In Start	
+'c'	char	Constanta	48	c	In Start	

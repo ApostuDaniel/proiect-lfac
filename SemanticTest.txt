@@ -1,0 +1,15 @@
+global{
+   // var int j <- (2 + j) * (i--);
+    const str n;
+   // var bool k <- p;
+   var bool ch <- "testchr";
+}
+
+newtype floor {
+    const str n;
+};
+
+start:{
+  // var string x <- 2;
+   i <- testfunc();
+}

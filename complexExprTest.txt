@@ -1,0 +1,20 @@
+global{
+    var int i <- 2;
+    var int j <- 4;
+    var float f <- 2.35;
+    var char c <- 'c';
+    var string s <- "Some string";
+    var bool b <- true;
+    var string[5] l <- {"Array works"};
+}
+
+func testFunc takes () returns int{
+    return 1;
+}
+
+start:{
+    Print("Complex bool expresion ", (((2 + j) * (i--)) - 1 == 11) && (((2 + j) * (i--)) == 12));
+    Print("i after opearation ", i);
+    Print("Combined float and int values ", i * f + j * f);
+    Print("Comparison operations ", !(s < "Tome string"));
+}
